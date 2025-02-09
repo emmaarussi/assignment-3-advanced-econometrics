@@ -1,0 +1,601 @@
+############# ADVANCED ECONOMETRICS ###############
+############# ASSIGNMENT 3 ########################
+#Autors: Emma Arussi, Marta Chejduk, Niels van Herk, Tess Scholtus
+
+######## PART 1 #######################
+
+#Libraries
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import statsmodels.api as sm
+from scipy.optimize import fsolve
+
+# Load the dataset
+data = pd.read_csv('Solara_AB_data.csv')
+
+
+# Extract the relevant columns
+g_expenses = data['g']  # Expenditure on Google Ads
+y_expenses = data['y']  # Expenditure on Youtube Ads
+sales = data['s']
+
+# Parameters
+alpha_g, beta_g, delta_g = 2, 0.9, 10
+alpha_y, beta_y, delta_y = 1, 0.97, 5
+
+# Initialize the adstocks
+g_adstock = np.zeros(len(g_expenses))
+y_adstock = np.zeros(len(y_expenses))
+
+# Initial values for adstock
+g_adstock[0] = 22
+y_adstock[0] = 41
+
+######## QUESTION 2 
+
+# Filter the adstocks using the provided model
+for t in range(1, len(g_expenses)):
+    g_adstock[t] = (alpha_g * g_expenses[t]) / (1 + delta_g * g_adstock[t-1]) + beta_g * g_adstock[t-1]
+    y_adstock[t] = (alpha_y * y_expenses[t]) / (1 + delta_y * y_adstock[t-1]) + beta_y * y_adstock[t-1]
+
+# Create a 2x2 grid of plots
+fig, axs = plt.subplots(2, 2, figsize=(12, 8))
+
+# Plot Google Adstock over time
+axs[0, 0].plot(g_adstock, color='blue')
+axs[0, 0].set_title('Filtered Google Adstock')
+axs[0, 0].set_xlabel('Time')
+axs[0, 0].set_ylabel('Adstock')
+
+# Plot Youtube Adstock over time
+axs[1, 0].plot(y_adstock, color='green')
+axs[1, 0].set_title('Filtered Youtube Adstock')
+axs[1, 0].set_xlabel('Time')
+axs[1, 0].set_ylabel('Adstock')
+
+# Histogram of Google Adstock
+axs[0, 1].hist(g_adstock, bins=50, color='blue', alpha=0.7)
+axs[0, 1].set_title('Histogram of Google Adstock')
+
+# Histogram of Youtube Adstock
+axs[1, 1].hist(y_adstock, bins=50, color='green', alpha=0.7)
+axs[1, 1].set_title('Histogram of Youtube Adstock')
+
+# Adjust layout and show plots
+plt.tight_layout()
+plt.show()
+
+# Calculate skewness for description
+g_skewness = pd.Series(g_adstock).skew()
+y_skewness = pd.Series(y_adstock).skew()
+
+print(f"Skewness of Google Adstock: {g_skewness:.2f}")
+print(f"Skewness of Youtube Adstock: {y_skewness:.2f}")
+
+######## QUESTION 3
+
+# Filter the adstocks using the provided model
+for t in range(1, len(g_expenses)):
+    g_adstock[t] = (alpha_g * g_expenses[t]) / (1 + delta_g * g_adstock[t-1]) + beta_g * g_adstock[t-1]
+    y_adstock[t] = (alpha_y * y_expenses[t]) / (1 + delta_y * y_adstock[t-1]) + beta_y * y_adstock[t-1]
+
+# Now perform the OLS regression
+
+# Create the design matrix (independent variables) with a constant for μ
+X = np.column_stack([g_adstock, y_adstock])
+X = sm.add_constant(X)  # Adds an intercept (mu) term to the model
+
+# Perform OLS regression
+model = sm.OLS(sales, X)
+results = model.fit()
+
+# Print the summary of the regression
+print(results.summary())
+
+# Extract the coefficients for interpretation
+mu = results.params[0]
+phi_g = results.params[1]
+phi_y = results.params[2]
+
+print(f"Estimated μ: {mu}")
+print(f"Estimated φg: {phi_g}")
+print(f"Estimated φy: {phi_y}")
+print(g_adstock)
+print(y_adstock)
+print(sales)
+
+######## QUESTION 4
+# Define the equation for long-run adstock
+def long_run_adstock(gads_inf, alpha, beta, delta, daily_budget):
+    return (alpha * daily_budget) / (1 + delta * gads_inf) + beta * gads_inf - gads_inf
+
+# Parameters for Google Ads
+alpha_g = 2
+beta_g = 0.9
+delta_g = 10
+daily_budget_g = 250
+
+# Initial guess for the long-run adstock value
+gads_inf_initial_guess = 22
+
+# Solve for the long-run Google Ads adstock
+gads_inf_google = fsolve(long_run_adstock, gads_inf_initial_guess, args=(alpha_g, beta_g, delta_g, daily_budget_g))[0]
+print(f"Long-run Google Ads adstock: {gads_inf_google:.2f}")
+
+# Parameters for YouTube Ads
+alpha_y = 1
+beta_y = 0.97
+delta_y = 5
+daily_budget_y = 250
+
+# Initial guess for the long-run adstock value
+yads_inf_initial_guess = 41
+
+# Solve for the long-run YouTube Ads adstock
+yads_inf_youtube = fsolve(long_run_adstock, yads_inf_initial_guess, args=(alpha_y, beta_y, delta_y, daily_budget_y))[0]
+print(f"Long-run YouTube Ads adstock: {yads_inf_youtube:.2f}")
+
+######## QUESTION 5
+
+# Long-run adstock values (from previous question)
+gads_long_run = 22.31
+yads_long_run = 40.72
+
+# Number of time points for the simulation
+T = 60  # Total time points for the simulation
+pre_impulse_periods = 5  # Number of pre-impulse periods
+impulse_date = 1  # Impulse happens at time t = 6
+
+# Baseline pre-impulse sales (before the impulse happens)
+s_j = mu + phi_g * gads_long_run + phi_y * yads_long_run
+
+################## Case 1: Impulse for Google Ads #########################
+
+# Google Ads expenditures with an impulse (100 euros extra at t = 6)
+g_expenses_google_impulse = np.full(T, 250)  # Google Ads expenditures fixed at 250
+y_expenses_google_impulse = np.full(T, 250)  # YouTube Ads expenditures fixed at 250
+
+# Apply impulse: Spend extra 100 euros on Google Ads at t = 6
+g_expenses_google_impulse[impulse_date] = 350  # Increase Google Ads expenditure for one day
+
+# Function to calculate adstock and sales (with YouTube adstock recalculated from t=6)
+def calculate_responses_with_youtube_update(g_expenses, y_expenses, T, pre_impulse_periods, impulse_date):
+    # Initialize adstocks and sales
+    g_adstock = np.zeros(T + pre_impulse_periods)  # Google adstock including pre-impulse periods
+    y_adstock = np.zeros(T + pre_impulse_periods)  # YouTube adstock including pre-impulse periods
+
+    # Set initial long-run adstock for Google Ads before the impulse
+    g_adstock[:pre_impulse_periods] = gads_long_run
+    # Set initial value for YouTube Ads adstock at t=5 to 40.72
+    y_adstock[:pre_impulse_periods] = yads_long_run
+
+    # Calculate adstocks and sales post-impulse
+    for t in range(pre_impulse_periods, T + pre_impulse_periods):
+        # Google Ads adstock
+        g_adstock[t] = (alpha_g * g_expenses[t - pre_impulse_periods]) / (1 + delta_g * g_adstock[t-1]) + beta_g * g_adstock[t-1]
+
+        # YouTube Ads adstock: constant before t = 6, then calculated
+        if t >= impulse_date:
+            y_adstock[t] = (alpha_y * y_expenses[t - pre_impulse_periods]) / (1 + delta_y * y_adstock[t-1]) + beta_y * y_adstock[t-1]
+        else:
+            y_adstock[t] = yads_long_run  # Keep it constant before t = 6
+
+    # Calculate sales based on adstocks
+    sales = mu + phi_g * g_adstock + phi_y * y_adstock
+
+    # Calculate daily and cumulative sales responses
+    daily_response = sales
+    cumulative_response = np.cumsum(sales - s_j)  # Cumulative sales response from baseline
+
+    return daily_response, cumulative_response
+
+# Recalculate with YouTube Ads adstock update from t=6
+daily_response_google_updated, cumulative_response_google_updated = calculate_responses_with_youtube_update(
+    g_expenses_google_impulse, y_expenses_google_impulse, T, pre_impulse_periods, impulse_date)
+
+################## Case 2: Impulse for YouTube Ads #########################
+
+# YouTube Ads expenditures with an impulse (100 euros extra at t = 6)
+g_expenses_youtube_impulse = np.full(T, 250)  # Google Ads expenditures fixed at 250
+y_expenses_youtube_impulse = np.full(T, 250)  # YouTube Ads expenditures fixed at 250
+
+# Apply impulse: Spend extra 100 euros on YouTube Ads at t = 6
+y_expenses_youtube_impulse[impulse_date] = 350  # Increase YouTube Ads expenditure for one day
+
+# Full function for the YouTube Ads impulse case
+def calculate_responses_youtube(g_expenses, y_expenses, T, pre_impulse_periods, impulse_date):
+    # Initialize adstocks and sales
+    g_adstock = np.full(T + pre_impulse_periods, gads_long_run)  # Google adstock stays constant
+    y_adstock = np.zeros(T + pre_impulse_periods)  # YouTube adstock including pre-impulse periods
+
+    # Set initial long-run adstock for YouTube Ads before the impulse
+    y_adstock[:pre_impulse_periods] = yads_long_run
+
+    # Calculate adstocks and sales post-impulse
+    for t in range(pre_impulse_periods, T + pre_impulse_periods):
+        # Google Ads adstock remains constant
+        g_adstock[t] = (alpha_g * g_expenses[t - pre_impulse_periods]) / (1 + delta_g * g_adstock[t-1]) + beta_g * g_adstock[t-1]
+
+        # YouTube Ads adstock
+        y_adstock[t] = (alpha_y * y_expenses[t - pre_impulse_periods]) / (1 + delta_y * y_adstock[t-1]) + beta_y * y_adstock[t-1]
+
+    # Calculate sales based on adstocks
+    sales = mu + phi_g * g_adstock + phi_y * y_adstock
+
+    # Calculate daily and cumulative sales responses
+    daily_response = sales
+    cumulative_response = np.cumsum(sales - s_j)  # Cumulative sales response from baseline
+
+    return daily_response, cumulative_response
+
+# Calculate daily and cumulative responses for the YouTube Ads impulse case
+daily_response_youtube, cumulative_response_youtube = calculate_responses_youtube(
+    g_expenses_youtube_impulse, y_expenses_youtube_impulse, T, pre_impulse_periods, impulse_date)
+
+# Adjusting the x-axis to reflect the real time (post pre-impulse periods)
+time_points = np.arange(-pre_impulse_periods, T)  # This adjusts the x-axis
+
+############# PLOTS
+fig, axs = plt.subplots(2, 2, figsize=(14, 10))
+
+# Plot daily sales response to Google Ads impulse
+axs[0, 0].plot(time_points, daily_response_google_updated, label='Sales Response to Google Ads Impulse', color='blue')
+axs[0, 0].set_title('Daily Sales Response (Google Ads Impulse)')
+axs[0, 0].set_xlabel('Time')
+axs[0, 0].set_ylabel('Sales')
+axs[0, 0].legend()
+
+# Plot cumulative sales response to Google Ads impulse
+axs[0, 1].plot(time_points, cumulative_response_google_updated, label='Cumulative Sales Response to Google Ads Impulse', color='green')
+axs[0, 1].set_title('Cumulative Sales Response (Google Ads Impulse)')
+axs[0, 1].set_xlabel('Time')
+axs[0, 1].set_ylabel('Cumulative Sales')
+axs[0, 1].legend()
+
+# Plot daily sales response to YouTube Ads impulse
+axs[1, 0].plot(time_points, daily_response_youtube, label='Sales Response to YouTube Ads Impulse', color='orange')
+axs[1, 0].set_title('Daily Sales Response (YouTube Ads Impulse)')
+axs[1, 0].set_xlabel('Time')
+axs[1, 0].set_ylabel('Sales')
+axs[1, 0].legend()
+
+# Plot cumulative sales response to YouTube Ads impulse
+axs[1, 1].plot(time_points, cumulative_response_youtube, label='Cumulative Sales Response to YouTube Ads Impulse', color='purple')
+axs[1, 1].set_title('Cumulative Sales Response (YouTube Ads Impulse)')
+axs[1, 1].set_xlabel('Time')
+axs[1, 1].set_ylabel('Cumulative Sales')
+axs[1, 1].legend()
+
+plt.tight_layout()
+plt.show()
+
+######## PART 2 ###############
+
+
+#### IMPORT FILES
+import pandas as pd 
+import matplotlib.pyplot as plt
+import statsmodels.api as sm
+from scipy.stats import chi2
+import numpy as np
+
+df = pd.read_csv("/Users/tessscholtus/Downloads/Solara_pricing_data.csv")
+print(df.head())
+df['dates'] = pd.to_datetime(df['dates'], format='%d/%m/%Y')
+
+###QUESTION 3.7
+#Creating plots
+fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+
+# Plot settings
+plot_params = {
+    'linewidth': 0.8
+}
+
+# Individual plots in the 2x2 grid
+df.plot(x='dates', y='s', ax=axes[0, 0], color='blue', title='Sales of travel insurance', **plot_params)
+df.plot(x='dates', y='p', ax=axes[0, 1], color='green', title='Prices of travel insurance', **plot_params)
+df.plot(x='dates', y='c', ax=axes[1, 0], color='red', title='Acquisition Costs of travel insurance', **plot_params)
+df.plot(x='dates', y='m', ax=axes[1, 1], color='purple', title='Marketing Expenditures of travel insurance', **plot_params)
+
+# Set common x-axis labels and rotate the ticks
+for ax in axes.flat:
+    ax.set_xlabel('Time in Years', fontsize=12)
+    ax.set_xticks(ax.get_xticks())
+    ax.tick_params(axis='x', rotation=45)
+
+# Customize y-axis labels
+axes[0, 0].set_ylabel('Total sales', fontsize=10)  # Sales
+axes[0, 1].set_ylabel('Euros (€)', fontsize=10)  # Prices
+axes[1, 0].set_ylabel('Euros (€)', fontsize=10)  # Acquisition Costs
+axes[1, 1].set_ylabel('Euros (€)', fontsize=10)  # Marketing Expenditures
+
+# Add grids for better readability
+for ax in axes.flat:
+    ax.grid(False)
+
+# Adjust layout to prevent overlap
+plt.tight_layout()
+
+# Show the plot
+plt.show()
+
+#QUESTION 3.8:
+#Run a simple regression OLS st on pt
+#Define dependent and independent
+X = df['p']
+y = df['s']
+
+# Add a constant (intercept) to the independent variable
+X = sm.add_constant(X)
+
+#Fit the regression model
+model = sm.OLS(y, X).fit(cov_type='HC0')
+
+#Print param estimates
+print(model.summary())
+
+#EXTRA STEP TO VISUALIZE THE REGRESSION
+# Get the predicted (fitted) values from the model
+fitted_values = model.predict(X)
+
+# Plot 1: Actual sales vs fitted sales based on selling price
+plt.figure(figsize=(8, 5))
+plt.scatter(df['p'], df['s'], color='blue', label='Actual Sales Data')
+plt.plot(df['p'], fitted_values, color='red', label='Fitted Sales', linewidth=2)
+plt.title('Actual sales versus fitted sales based on selling')
+plt.xlabel('Selling price (p)')
+plt.ylabel('Sales (s)')
+plt.legend()
+plt.grid(False)
+plt.show()
+
+#QUESTION 3.11 2SLS
+# Step 1: Regress prices (p) on costs (c) to obtain predicted prices (p_hat)
+X_c = df['c']
+X_c = sm.add_constant(X_c)  #Regression with constant
+
+# First regression: p_t = δ + γc_t + u_t
+model1 = sm.OLS(df['p'], X_c).fit(cov_type='HC0')
+df['p_hat'] = model1.predict(X_c)
+
+# Output for the first regression
+print("Regression of prices on costs (p_t = δ + γc_t + u_t):")
+print(model1.summary())
+
+# Step 2: Regress sales (s) on predicted prices (p_hat)
+X_phat = sm.add_constant(df['p_hat'])
+
+# Second regression: s_t = α + βp_hat_t + ε_t
+model2 = sm.OLS(df['s'], X_phat).fit(cov_type='HC0')
+
+# Output for the second regression
+print("\nRegression of sales on predicted prices (s_t = α + βp_hat_t + ε_t):")
+print(model2.summary())
+
+#TEST FOR EXOGENEITY FOR Q 3.11
+# Step 1: First regression (prices on costs)
+X_c = sm.add_constant(df['c'])
+model1 = sm.OLS(df['p'], X_c).fit(cov_type='HC0')
+df['p_hat'] = model1.predict(X_c)
+
+# Step 2: Second regression (sales on predicted prices)
+X_phat = sm.add_constant(df['p_hat'])
+model2 = sm.OLS(df['s'], X_phat).fit(cov_type='HC0')
+
+# Step 3: Obtain residuals from both regressions
+residuals_u = model1.resid  # Residuals from the first-stage regression (p_t on c_t)
+residuals_e = model2.resid  # Residuals from the second-stage regression (s_t on p_hat)
+
+# Step 4: Regress residuals_u (from first-stage) on instrument (c_t)
+X_c_residuals_u = sm.add_constant(df['c'])
+exog_test_u = sm.OLS(residuals_u, X_c_residuals_u).fit(cov_type='HC0')
+
+# Step 5: Regress residuals_e (from second-stage) on instrument (c_t)
+X_c_residuals_e = sm.add_constant(df['c'])
+exog_test_e = sm.OLS(residuals_e, X_c_residuals_e).fit(cov_type='HC0')
+
+# Check p-values for both regressions
+if exog_test_u.pvalues[1] > 0.05 and exog_test_e.pvalues[1] > 0.05:
+    print("The instrument is exogenous (no significant correlation with residuals from both stages).")
+else:
+    print("The instrument may not be exogenous (significant correlation found with residuals).")
+    
+#### QUESTION 3.12 HAUSMAN WU #####
+# Step 1: OLS regression (efficient estimator for p)
+X_ols = sm.add_constant(df['p'].values)  # Add constant (intercept) to price (p) and convert to NumPy array
+y = df['s'].values  # Sales (s) as NumPy array
+
+# OLS model: s_t = alpha + beta * p_t + error_t
+ols_model = sm.OLS(y, X_ols).fit(cov_type='HC0')
+theta_hat = ols_model.params  # OLS parameters (includes intercept and slope)
+print(f"OLS parameters (theta_hat): {theta_hat}")
+
+# Step 2: 2SLS regression (consistent estimator for p_hat)
+# First stage: regress price (p) on costs (c) to get predicted prices (p_hat)
+X_c = sm.add_constant(df['c'].values)  
+first_stage = sm.OLS(df['p'].values, X_c).fit(cov_type='HC0')
+df['p_hat'] = first_stage.predict(X_c)
+
+# Second stage: regress sales (s) on predicted prices (p_hat)
+X_2sls = sm.add_constant(df['p_hat'].values)  # Add constant (intercept) to p_hat and convert to NumPy array
+second_stage = sm.OLS(df['s'].values, X_2sls).fit(cov_type='HC0')
+theta_tilde = second_stage.params  # 2SLS parameters (includes intercept and slope)
+print(f"2SLS parameters (theta_tilde): {theta_tilde}")
+
+# Step 3: Calculate the difference between the OLS and 2SLS coefficients (including intercept)
+theta_diff = theta_tilde - theta_hat
+print(f"Difference between OLS and 2SLS coefficients (theta_tilde - theta_hat): {theta_diff}")
+
+X = X_ols  # X_ols already has the intercept term added
+
+# Calculate the residuals (actual sales - predicted sales)
+residuals = ols_model.resid
+
+# Degrees of freedom: n - k (number of observations minus number of parameters)
+n = X.shape[0]
+k = X.shape[1]
+df_residual = n - k
+
+# Calculate sigma^2: residual sum of squares (RSS) divided by degrees of freedom
+sigma_squared = (residuals ** 2).sum() / df_residual
+print(sigma_squared)
+
+# Compute (X'X)^(-1)
+XtX_inv = np.linalg.inv(np.dot(X.T, X))
+
+# OLS variance-covariance matrix: sigma^2 * (X'X)^(-1)
+ols_variance_cov_matrix = sigma_squared * XtX_inv
+
+# Display the OLS variance-covariance matrix
+print("OLS Variance-Covariance Matrix:")
+print(ols_variance_cov_matrix)
+
+# Extract values from the 2SLS second-stage model
+X_2sls = sm.add_constant(df['p_hat'].values)  # Regressors in the second stage
+Z_2sls = X_2sls  # Instrumental variables in the second stage (constant + predicted prices)
+
+# Residuals and estimated error variance (σ^2) from the second stage
+residuals_2sls = second_stage.resid
+sigma_squared_2sls = np.var(residuals_2sls, ddof= X_2sls.shape[1])
+print(sigma_squared_2sls)
+
+
+# Calculate the matrices for the variance formula
+Z_X_inv = np.linalg.inv(Z_2sls.T @ X_2sls)
+Z_Z_inv = (Z_2sls.T @ Z_2sls)
+X_Z_inv = np.linalg.inv(X_2sls.T @ Z_2sls)
+
+# Compute the 2SLS variance-covariance matrix
+variance_2sls = sigma_squared_2sls * Z_X_inv @ Z_Z_inv @ X_Z_inv
+
+# Output the 2SLS variance-covariance matrix
+print("2SLS Variance-Covariance Matrix:")
+print(variance_2sls)
+
+# Step 1: Calculate the difference between 2SLS and OLS coefficients (theta_tilde - theta_hat)
+theta_diff = second_stage.params - ols_model.params  # Includes both constant and slope coefficients
+theta_diff = np.array([theta_diff]).T  # Convert to column vector
+
+# Step 2: Compute the difference between the variance-covariance matrices for 2SLS and OLS
+variance_diff = variance_2sls - ols_variance_cov_matrix
+
+# Step 3: Compute the inverse of the variance difference matrix
+variance_diff_inv = np.linalg.inv(variance_diff)
+
+# Step 4: Compute the Hausman test statistic
+T = len(df)  # Sample size
+hausman_stat = T * np.dot(np.dot(theta_diff.T, variance_diff_inv), theta_diff)
+
+# Step 5: Output the Hausman test statistic
+print(f"Hausman test statistic: {hausman_stat[0][0]}")
+
+# Degrees of freedom: number of parameters tested (2 for constant and slope)
+df_test = len(theta_diff)
+
+# Step 6: Compute the p-value based on the chi-squared distribution
+p_value = 1 - chi2.cdf(hausman_stat[0][0], df_test)
+
+print(f"P-value: {p_value}")
+
+# Interpretation of the result
+if p_value < 0.05:
+    print("Reject the null hypothesis: evidence of endogeneity.")
+else:
+    print("Fail to reject the null hypothesis: no evidence of endogeneity.")
+    
+####### QUESTION 13 ##########
+# Step 1: Regress prices (p) on costs (c) only
+X_c = sm.add_constant(df['c'])  # Add constant to costs only
+
+# First regression: p_t = δ + γc_t + u_t
+model1 = sm.OLS(df['p'], X_c).fit()
+df['p_hat'] = model1.predict(X_c)
+
+# Output for the first regression
+print("Regression of prices on costs only (p_t = δ + γc_t + u_t):")
+print(model1.summary())
+
+# Step 2: Regress sales (s) on predicted prices (p_hat) and marketing expenditures (m)
+X_phat_m = sm.add_constant(np.column_stack((df['p_hat'], df['m'])))  # Add constant and combine predicted price and marketing
+
+# Second regression: s_t = α + βp_hat_t + ψm_t + ε_t
+model3 = sm.OLS(df['s'], X_phat_m).fit()  # Use combined variables here
+
+# Output for the second regression
+print("\nRegression of sales on predicted prices and marketing expenditures (s_t = α + βp_hat_t + ψm_t + ε_t):")
+print(model3.summary())
+
+####### QUESTION 14 ##########
+
+X_c = sm.add_constant(df['c'])
+model1 = sm.OLS(df['p'], X_c).fit()
+df['p_hat'] = model1.predict(X_c)
+
+# Output for the first regression
+print("Regression of prices on costs and marketing expenditures (p_t = δ + γc_t + ψm_t + u_t):")
+print(model1.summary())
+
+# Step 2: Regress sales (s) on predicted prices (p_hat) and marketing expenditures (m)
+X_phat_m = sm.add_constant(np.column_stack((df['p_hat'], df['m'])))
+model2 = sm.OLS(df['s'], X_phat_m).fit()
+
+# Output for the second regression
+print("\nRegression of sales on predicted prices and marketing expenditures (s_t = α + βp_hat_t + ψm_t + ε_t):")
+print(model2.summary())
+
+# Step 3: Estimate AR(1) processes for costs (c) and marketing (m)
+# Create a lagged DataFrame
+df['c_lag'] = df['c'].shift(1)
+df['m_lag'] = df['m'].shift(1)
+
+# Drop rows with NaN values (first row after shifting)
+df.dropna(subset=['c_lag', 'm_lag'], inplace=True)
+
+# c_t = μc + φc * c_(t-1) + ε_c,t
+X_c = sm.add_constant(df['c_lag'])  # Independent variable
+y_c = df['c']  # Dependent variable
+model_c = sm.OLS(y_c, X_c).fit()
+
+# m_t = μm + φm * m_(t-1) + ε_m,t
+X_m = sm.add_constant(df['m_lag'])  # Independent variable
+y_m = df['m']  # Dependent variable
+model_m = sm.OLS(y_m, X_m).fit()
+
+# Output AR(1) estimation results
+print("\nEstimation of AR(1) process for costs (c_t = μc + φc * c_(t-1) + ε_c,t):")
+print(model_c.summary())
+
+print("\nEstimation of AR(1) process for marketing expenditures (m_t = μm + φm * m_(t-1) + ε_m,t):")
+print(model_m.summary())
+
+# Step 4: Calculate expectations for c_{T+1} and m_{T+1}
+# Get last observed values c_T and m_T
+c_T = df['c'].iloc[-1]
+m_T = df['m'].iloc[-1]
+
+# Get parameters from the AR(1) models
+mu_c, phi_c = model_c.params
+mu_m, phi_m = model_m.params
+
+# Calculate E(c_{T+1} | F_T) and E(m_{T+1} | F_T)
+E_c_T1 = mu_c + phi_c * c_T
+E_m_T1 = mu_m + phi_m * m_T
+
+print(f"\nExpected c_{T+1}: {E_c_T1}")
+print(f"Expected m_{T+1}: {E_m_T1}")
+
+# Step 5: Use the sales regression model to estimate α, β, ψ
+alpha = model2.params[0]  # Constant term
+beta = model2.params[1]   # Coefficient for p_hat (predicted price)
+psi = model2.params[2]    # Coefficient for marketing expenditures
+
+# Step 6: Calculate the optimal price p_{T+1}^*
+p_T1_opt = (beta * E_c_T1 - alpha - psi * E_m_T1) / (2 * beta)
+
+# Step 7: Compare to the last observed price
+p_T = df['p'].iloc[-1]
+
+print(f"\nOptimal price at T+1: {p_T1_opt}")
+print(f"Last observed price: {p_T}")
